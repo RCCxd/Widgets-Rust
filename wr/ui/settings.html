@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="glass.css">
+<style>
+html,body{background:#16161a;color:#eee;overflow:auto;user-select:none}
+body{display:flex;height:100vh}
+nav{width:190px;padding:20px 12px;background:#1d1d23;display:flex;flex-direction:column;gap:4px}
+nav h1{font-size:17px;padding:0 12px 14px}
+nav button{color:#ddd;text-align:left;padding:10px 12px;border-radius:10px;font-size:14px;display:block;width:100%}
+nav button.on{background:var(--acc);color:#fff}nav button:hover:not(.on){background:#2a2a32}
+main{flex:1;padding:28px 30px;overflow:auto}main h2{font-size:22px;margin-bottom:18px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 0;border-bottom:1px solid #2a2a32;font-size:14px}
+.row output{color:#999;font-size:12px;margin-left:8px;display:inline-block;width:38px}
+input[type=range]{width:200px;accent-color:var(--acc)}input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
+select{background:#2a2a32;color:#eee;border:1px solid #3a3a44;border-radius:8px;padding:6px 10px}input[type=color]{width:44px;height:28px;border:0;background:none}
+aside{width:340px;padding:24px;background:linear-gradient(135deg,#ff7a59,#8f5cff 55%,#2bb6ff);display:flex;flex-direction:column;gap:16px;justify-content:center}
+.pv{padding:16px 18px}.pv .big{font-size:46px;font-weight:200;font-variant-numeric:tabular-nums}
+.pm{display:flex;gap:12px;align-items:center}.pm .cover{width:52px;height:52px}
+.pill{display:inline-block;background:var(--acc);color:#fff;border-radius:99px;padding:3px 12px;font-size:12px;margin-top:8px}
+small{color:#888;display:block;margin-top:14px;font-size:12px}
+</style></head>
+<body>
+<nav id="nav"></nav><main id="main"></main>
+<aside>
+  <div class="glass pv"><div class="acc" id="pwd"></div><div class="big" id="pt"></div><span class="pill">Destaque</span></div>
+  <div class="glass pv"><div class="pm"><div class="cover" id="pc"></div><div class="meta"><div class="title" id="ptl">Nada tocando</div><div class="artist" id="pa" style="color:var(--fg2)">Prévia em tempo real</div></div></div></div>
+</aside>
+<script src="common.js"></script>
+<script>
+const C = [
+ ['Aparência', [['theme','select','Tema',[['auto','Automático'],['dark','Escuro'],['light','Claro']]],['accent','color','Cor de destaque'],['opacity','range','Transparência do vidro',.25,.95,.01],['radius','range','Arredondamento',8,40,1],['scale','range','Escala dos widgets',.8,1.4,.05]]],
+ ['Widgets', [['show.clock','check','Relógio'],['show.cal','check','Calendário'],['show.music','check','Player de música']]],
+ ['Hora e data', [['hour12','check','Relógio em 12 horas'],['seconds','check','Mostrar segundos'],['weekStart','select','Primeiro dia da semana',[[0,'Domingo'],[1,'Segunda-feira']]]]],
+ ['Comportamento', [['onTop','check','Sempre no topo (acima das janelas)'],['autostart','check','Iniciar com o Windows']]]
+];
+let tab = 0;
+const get = (o, p) => p.split('.').reduce((a, k) => a && a[k], o);
+const put = (o, p, v) => { const k = p.split('.'), l = k.pop(); k.reduce((a, x) => a[x], o)[l] = v; };
+const save = () => { T.core.invoke('set_settings', { json: JSON.stringify(S) }); apply(S); };
+function render() {
+  nav.innerHTML = '<h1>Widgets</h1>' + C.map((c, i) => `<button class="${i === tab ? 'on' : ''}" data-i="${i}">${c[0]}</button>`).join('');
+  nav.querySelectorAll('button').forEach(b => b.onclick = () => { tab = +b.dataset.i; render(); });
+  main.innerHTML = `<h2>${C[tab][0]}</h2>` + C[tab][1].map(([k, t, l, a, b, c]) => {
+    const v = get(S, k); let ctl = '';
+    if (t === 'check') ctl = `<input type="checkbox" data-k="${k}" ${v ? 'checked' : ''}>`;
+    if (t === 'color') ctl = `<input type="color" data-k="${k}" value="${v}">`;
+    if (t === 'range') ctl = `<span><input type="range" data-k="${k}" min="${a}" max="${b}" step="${c}" value="${v}"><output>${v}</output></span>`;
+    if (t === 'select') ctl = `<select data-k="${k}">${a.map(([x, y]) => `<option value="${x}" ${x == v ? 'selected' : ''}>${y}</option>`).join('')}</select>`;
+    return `<div class="row"><span>${l}</span>${ctl}</div>`;
+  }).join('') + (tab === 3 ? '<small>Configurações salvas em %APPDATA%\\dev.renan.widgets\\settings.json</small>' : '');
+  main.querySelectorAll('[data-k]').forEach(el => el.oninput = el.onchange = () => {
+    const k = el.dataset.k, v = el.type === 'checkbox' ? el.checked : (el.type === 'range' || typeof get(DEF, k) === 'number') ? Number(el.value) : el.value;
+    put(S, k, v); if (k === 'autostart') T.core.invoke('set_autostart', { on: v }); if (el.nextElementSibling) el.nextElementSibling.textContent = v; save();
+  });
+}
+let synced = false;
+window.onS = () => { if (!synced) { synced = true; T.core.invoke('get_autostart').then(v => { S.autostart = v; render(); }); }
+  if (!main.querySelector(':focus')) render(); tickP(); };
+function tickP() { const n = new Date(); pt.textContent = n.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: S.seconds ? '2-digit' : undefined, hour12: S.hour12 }); pwd.textContent = n.toLocaleDateString('pt-BR', { weekday: 'long' }); }
+setInterval(tickP, 1000);
+T.event.listen('media', e => { const d = e.payload; ptl.textContent = d.active ? d.title : 'Nada tocando'; pa.textContent = d.active ? d.artist : 'Prévia em tempo real'; if (d.thumb) pc.style.backgroundImage = `url(${d.thumb})`; if (!d.active) pc.style.backgroundImage = ''; });
+</script>
+</body></html>

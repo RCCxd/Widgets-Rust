@@ -1,0 +1,33 @@
+name: Build e Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Compilar
+        working-directory: src-tauri
+        run: cargo build --release
+      - name: Guardar o .exe como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: Widgets-windows
+          path: src-tauri/target/release/widgets.exe
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/widgets.exe
+          generate_release_notes: true

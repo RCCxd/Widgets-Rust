@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><link rel="stylesheet" href="glass.css"></head>
+<body>
+<div class="w glass" id="clock"><div class="acc" id="wd"></div><div id="time"></div><div id="date"></div></div>
+<div class="w glass" id="cal"></div>
+<div class="w glass music" id="music">
+  <div class="bg" id="bg"></div><div class="shade"></div>
+  <div class="inner">
+    <div class="top" id="top">
+      <div class="cover" id="cover"></div>
+      <div class="meta"><div class="src"><i id="dot"></i><span id="src">Música</span></div><div class="title" id="title">Nada tocando</div><div class="artist" id="artist">Abra o Spotify ou o YouTube</div></div>
+      <div class="eq" id="eq"><b></b><b></b><b></b></div>
+      <button class="mini pp" id="mini"><svg width="30" height="30" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+    </div>
+    <div class="ex">
+      <div class="bar nodrag" id="bar"><div class="fillw"><div id="fill"></div></div></div>
+      <div class="times"><span id="cur">0:00</span><span id="dur">0:00</span></div>
+      <div class="ctrl">
+        <button id="prev"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12 18 6v12z"/></svg></button>
+        <button class="pp" id="toggle"><svg width="38" height="38" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <button id="next"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM6 18V6l8.5 6z"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>window.__W = true;</script>
+<script src="common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const me = T.window.getCurrentWindow(), label = me.label;
+document.querySelectorAll('.w').forEach(e => { if (e.id !== label) e.remove(); });
+const BASE = { clock: [300, 150], cal: [300, 290], music: [300, 92] };
+let expanded = false, lastFit = '', lastVis = null, lastTop = null;
+const fit = () => { const [w, h] = BASE[label], H = label === 'music' && expanded ? 340 : h, k = `${S.scale}|${H}`; if (k === lastFit) return; lastFit = k; me.setSize(new T.dpi.LogicalSize(w * S.scale, H * S.scale)); };
+window.onS = () => {
+  fit();
+  if (S.show[label] !== lastVis) { lastVis = S.show[label]; S.show[label] ? me.show() : me.hide(); }
+  if (S.onTop !== lastTop) { lastTop = S.onTop; me.setAlwaysOnTop(S.onTop); me.setAlwaysOnBottom(!S.onTop); }
+  last = ''; calDay = ''; if (label === 'clock' || label === 'cal') tick();
+};
+
+// ---- relógio e calendário ----
+let last = '', off = 0, EV = [], sel = null, editId = null, calDay = '';
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const saveEv = () => { T.core.invoke('set_events', { json: JSON.stringify(EV) }); calDay = ''; tick(); };
+if (label === 'cal') {
+  const load = j => { try { EV = JSON.parse(j || '[]'); } catch { EV = []; } calDay = ''; tick(); };
+  T.core.invoke('get_events').then(load); T.event.listen('events', e => load(e.payload));
+}
+function renderDay() {
+  const [y, m, d] = sel.split('-').map(Number), dt = new Date(y, m - 1, d);
+  const list = EV.filter(e => e.date === sel).sort((a, b) => (a.time || '99').localeCompare(b.time || '99')), ed = list.find(e => e.id === editId);
+  $('cal').innerHTML = `<div class="ch"><button id="bk">‹</button><b style="cursor:default">${dt.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</b></div>
+  <div class="evl">${list.length ? list.map(e => `<div class="evr ${e.id === editId ? 'sel' : ''}" data-id="${e.id}"><span>${e.time || '—'}</span><em>${esc(e.title)}</em><button data-x="${e.id}">×</button></div>`).join('') : '<div class="none">Sem compromissos neste dia</div>'}</div>
+  <div class="evf"><input id="et" placeholder="Compromisso" maxlength="60" value="${ed ? esc(ed.title) : ''}"><input id="eh" type="time" value="${ed ? ed.time : ''}"><button id="ea">${ed ? '✓' : '+'}</button></div>`;
+  $('bk').onclick = () => { sel = null; editId = null; renderCal(new Date()); };
+  $('cal').querySelectorAll('.evr').forEach(r => r.onclick = e => { if (e.target.dataset.x) { EV = EV.filter(x => x.id !== e.target.dataset.x); editId = null; return saveEv(); } editId = r.dataset.id; renderDay(); });
+  $('ea').onclick = () => {
+    const t = $('et').value.trim(); if (!t) return $('et').focus(); const tm = $('eh').value;
+    if (editId) { const x = EV.find(e => e.id === editId); if (x) { x.title = t; x.time = tm; } } else EV.push({ id: Date.now().toString(36), date: sel, time: tm, title: t });
+    editId = null; saveEv();
+  };
+  $('et').onkeydown = e => { if (e.key === 'Enter') $('ea').click(); };
+}
+function easter(y){const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),n=h+l-7*m+114;return new Date(y,Math.floor(n/31)-1,n%31+1)}
+function holidays(y){ // feriados nacionais brasileiros (fixos + móveis)
+  const s = new Set(['0101','0421','0501','0907','1012','1102','1115','1120','1225']), e = easter(y);
+  [-48,-47,-2,60].forEach(n => { const d = new Date(e); d.setDate(d.getDate() + n); s.add(String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0')); });
+  return s;
+}
+function renderCal(n) {
+  if (sel) return renderDay();
+  const v = new Date(n.getFullYear(), n.getMonth() + off, 1), y = v.getFullYear(), m = v.getMonth(), H = holidays(y), evd = new Set(EV.map(e => e.date));
+  const first = (v.getDay() - S.weekStart + 7) % 7, days = new Date(y, m + 1, 0).getDate();
+  let h = `<div class="ch"><b id="mt">${v.toLocaleDateString('pt-BR', { month: 'long' })}</b><span>${y}</span><button id="pm">‹</button><button id="nm">›</button></div><div class="g">`;
+  for (let i = 0; i < 7; i++) h += `<i class="wd">${'DSTQQSS'[(i + S.weekStart) % 7]}</i>`;
+  for (let i = 0; i < first; i++) h += '<i></i>';
+  for (let d = 1; d <= days; d++) {
+    const dow = new Date(y, m, d).getDay(), hk = String(m+1).padStart(2,'0') + String(d).padStart(2,'0');
+    const t = off === 0 && d === n.getDate();
+    const ds = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    h += `<i data-d="${ds}" class="${t ? 't' : H.has(hk) ? 'h' : dow % 6 === 0 ? 'we' : ''} ${evd.has(ds) ? 'ev' : ''}">${d}</i>`;
+  }
+  $('cal').innerHTML = h + '</div>';
+  $('cal').querySelector('.g').onclick = e => { if (e.target.dataset.d) { sel = e.target.dataset.d; editId = null; renderDay(); } };
+  $('pm').onclick = () => { off--; renderCal(new Date()); }; $('nm').onclick = () => { off++; renderCal(new Date()); }; $('mt').onclick = () => { off = 0; renderCal(new Date()); };
+}
+function tick() {
+  const n = new Date();
+  if (label === 'cal') { const c = n.toDateString(); if (c !== calDay) { calDay = c; renderCal(n); } return; }
+  const k = n.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: S.seconds ? '2-digit' : undefined, hour12: S.hour12 });
+  if (k === last) return; last = k;
+  $('time').textContent = k;
+  $('wd').textContent = n.toLocaleDateString('pt-BR', { weekday: 'long' });
+  $('date').textContent = n.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+if (label === 'clock' || label === 'cal') setInterval(tick, 1000);
+
+// ---- player ----
+if (label === 'music') {
+  const cmd = a => T.core.invoke('media_cmd', { action: a });
+  const PLAY = 'M8 5v14l11-7z', PAUSE = 'M6 5h4v14H6zM14 5h4v14h-4z';
+  const fmt = s => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  const setPlaying = p => { document.querySelectorAll('.pp path').forEach(e => e.setAttribute('d', p ? PAUSE : PLAY)); $('eq').classList.toggle('on', p); };
+  function setCover(url) {
+    $('cover').style.backgroundImage = url ? `url(${url})` : '';
+    if (!url) { $('bg').style.backgroundImage = ''; return; }
+    const i = new Image();
+    i.onload = () => { // fundo em alta qualidade: desfoque feito uma única vez no canvas (sem custo contínuo de GPU)
+      const c = document.createElement('canvas'); c.width = 300; c.height = 340;
+      const x = c.getContext('2d'), k = Math.max(c.width / i.width, c.height / i.height) * 1.35, w = i.width * k, h = i.height * k;
+      x.filter = 'blur(22px) saturate(1.5) brightness(1.05)';
+      x.drawImage(i, (c.width - w) / 2, (c.height - h) / 2, w, h);
+      $('bg').style.backgroundImage = `url(${c.toDataURL('image/jpeg', .92)})`;
+    };
+    i.src = url;
+  }
+  let st = { pos: 0, dur: 0, playing: false, t: 0 }, lastKey = null;
+  const cur = () => { let p = st.pos + (st.playing ? (performance.now() - st.t) / 1000 : 0); return st.dur > 0 ? Math.min(p, st.dur) : p; };
+  function paint() { if (!expanded) return; const p = cur(); $('cur').textContent = fmt(p); $('dur').textContent = fmt(st.dur); $('fill').style.transform = `scaleX(${st.dur > 0 ? p / st.dur : 0})`; }
+  setInterval(() => { if (st.playing) paint(); }, 500);
+  $('top').onclick = e => { if (e.target.closest('button')) return; expanded = !expanded; $('music').classList.toggle('x', expanded); fit(); paint(); };
+  T.event.listen('media', ev => {
+    const d = ev.payload;
+    if (!d.active) {
+      lastKey = null; setCover(null); setPlaying(false); st = { pos: 0, dur: 0, playing: false, t: 0 };
+      $('title').textContent = 'Nada tocando'; $('artist').textContent = 'Abra o Spotify ou o YouTube'; $('src').textContent = 'Música'; $('dot').style.background = '#888'; paint(); return;
+    }
+    if (d.key !== lastKey) { lastKey = d.key; setCover(null); }
+    if (d.thumb) setCover(d.thumb);
+    $('title').textContent = d.title || 'Sem título'; $('artist').textContent = d.artist || '—';
+    const a = (d.app || '').toLowerCase(), sp = a.includes('spotify');
+    $('src').textContent = sp ? 'Spotify' : (/chrome|edge|firefox|brave|opera|vivaldi/.test(a) ? 'Navegador' : 'Mídia');
+    $('dot').style.background = sp ? '#1ed760' : '#ff453a';
+    setPlaying(d.playing); st = { pos: d.pos, dur: d.dur, playing: d.playing, t: performance.now() }; paint();
+  });
+  $('prev').onclick = () => cmd('prev'); $('next').onclick = () => cmd('next');
+  $('toggle').onclick = $('mini').onclick = () => { cmd('toggle'); setPlaying(!st.playing); };
+  $('bar').onclick = e => { if (st.dur <= 0) return; const r = $('bar').getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)); st.pos = f * st.dur; st.t = performance.now(); paint(); T.core.invoke('media_seek', { secs: st.pos }); };
+}
+</script>
+</body></html>
